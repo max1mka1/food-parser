@@ -3,12 +3,10 @@ from bs4 import BeautifulSoup
 from random import choice
 
 
-def get_proxy():
+def get_proxies():
     html = requests.get('https://free-proxy-list.net/').text
     soup = BeautifulSoup(html, 'lxml')
-
-    trs = soup.find('table', id='proxylisttable').find_all('tr')[1:11]
-
+    trs = soup.find('tbody').find_all('tr')
     proxies = []
 
     for tr in trs:
@@ -19,14 +17,17 @@ def get_proxy():
         proxy = {'schema': schema, 'address': ip + ':' + port}
         proxies.append(proxy)
 
-    return choice(proxies)
+    return proxies
 
+def get_proxy(proxies):
+    return choice(proxies)
 
 def get_html(url):
     # proxies = {'https': 'ipaddress:5000'}
-    p = get_proxy() # {'schema': '', 'address': ''}
-
-    proxy = { p['schema']: p['address']  }
+    proxies = get_proxies() # {'schema': '', 'address': ''}
+    print()
+    p = get_proxy(proxies)
+    proxy = {p['schema']:p['address']}
     r = requests.get(url, proxies=proxy, timeout=5)
     return r.json()['origin']
 
