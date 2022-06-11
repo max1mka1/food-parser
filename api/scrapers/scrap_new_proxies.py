@@ -1,8 +1,23 @@
+import os
+import re
 import requests_html
-from bs4 import BeautifulSoup
 import pickle
 import requests
 import time
+import itertools
+
+import numpy as np
+import pandas as pd
+
+from selenium import webdriver
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.common.by import By
+
+from bs4 import BeautifulSoup
+
 
 px_list = set()
 try:
@@ -11,21 +26,62 @@ try:
 except:
     pass
 
-def scrap_proxy():
-    global px_list
-    px_list = set()
+executable_path = os.path.join(os.getcwd(), 'chromedriver', 'chromedriver')
+
+options = Options()
+# options.add_argument("start-minimized")
+# options.add_argument("--disable-extensions")
+options.add_argument("user-agent=Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:84.0) Gecko/20100101 Firefox/84.0")
+options.add_argument("--disable-blink-features=AutomationControlled")
+
+driver = webdriver.Chrome(service=Service(executable_path), options=options)  # Service(ChromeDriverManager().install()
+
+city_code = '85'
+cookies = {'mg_geo_id': f'{city_code}'}
+
+
+def split_on_func(list_to_split, delimeter):
+
+    splitted = [[]]
+    for item in list_to_split:
+        if delimeter(item):
+            splitted.append([item])
+        else:
+            splitted[-1].append(item)
+
+    return [elem for elem in splitted if elem != '' and elem != []]
+
+
+def proxies_to_df(proxies_list: list) -> pd.DataFrame:
+    columns = 'ip, port, code, country, anonymity, google, https, last_checked'.split(', ')
+    # data = dict([[name, []] for name in names])
+    L = []
+    for proxy_list in proxies_list:
+        assert len(proxy_list) in (7, 8), f'Length should be 7 or 8, not {len(proxy_string)}'
+        if len(proxy_list) == 7:
+            proxy_list.insert(5, 'unknown')
+        L.append(proxy_list)
+
+    df = pd.DataFrame(L, columns=columns)
+
+    return df
+
+def scrap_proxies():
     session = requests_html.HTMLSession()
     r = session.get('https://free-proxy-list.net/')
     r.html.render()
     for i in range(1, 21):
-        add=r.html.xpath('/html/body/section[1]/div/div[2]/div/div[2]/div/table/tbody/tr[{}]/td[1]/text()'.format(i))[0]
-        port=r.html.xpath('/html/body/section[1]/div/div[2]/div/div[2]/div/table/tbody/tr[{}]/td[2]/text()'.format(i))[0]
-        px_list.add(':'.join([add, port]))
+        proxies_text = r.html.xpath('/html/body/section[1]/div/div[2]/div/table/tbody')[0].text
+        px_list = proxies_text.split('\n')
+        ip_valid = lambda x: True if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", x) else False
+        px_list = split_on_func(list_to_split=px_list, delimeter=ip_valid)
 
-    print("---New proxy scraped, left: " + str(len(px_list)))
+    print(f'---New proxy scraped, left: {len(px_list)}')
     with open('proxis.pickle', 'wb') as f:
         pickle.dump(px_list, f)
+
     return px_list
+
 
 def check_proxy(px):
     try:
@@ -51,51 +107,33 @@ def get_proxy(scrap = False):
     return px
 
 
-import os
-from selenium import webdriver
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.common.by import By
+while True:
+    px_list = scrap_proxies()
+    df = proxies_to_df(px_list)
+    print(df.head())
+    PROXY = get_proxy(scrap=True)
+    options.add_argument('--proxy-server=%s' % PROXY)
+    driver = webdriver.Chrome(chrome_options=options, executable_path=os.path.abspath("chromedriver"))
+    try:
+        driver.get('https://google.com')
+        driver.add_cookie(cookies)
+        driver.find_element(By.NAME, 'q').send_keys('Yasser Khalil')
+    except:
+        print('Captcha!')
 
 
 
 
-executable_path = os.path.join(os.getcwd(), 'chromedriver', 'chromedriver')
-
-options = Options()
-# options.add_argument("start-maximized")
-# options.add_argument("--disable-extensions")
-options.add_argument("user-agent=Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:84.0) Gecko/20100101 Firefox/84.0")
-options.add_argument("--disable-blink-features=AutomationControlled")
-
-driver = webdriver.Chrome(service=Service(executable_path), options=options)  # Service(ChromeDriverManager().install()
-
-city_code = '85'
-cookies = {'mg_geo_id': f'{city_code}'}
-
-# while True:
-#     PROXY = get_proxy(scrap=True)
-#     options.add_argument('--proxy-server=%s' % PROXY)
-#     driver = webdriver.Chrome(chrome_options=options, executable_path=os.path.abspath("chromedriver"))
-#     try:
-#         driver.get('https://google.com')
-#         driver.add_cookie(cookies)
-#         driver.find_element(By.NAME, 'q').send_keys('Yasser Khalil')
-#     except:
-#         print('Captcha!')
-
-try:
-    # driver.get("https://intoli.com/blog/not-possible-to-block-chrome-headless/chrome-headless-test.html")
-    driver.get("https://www.vindecoderz.com/EN/check-lookup/ZDMMADBMXHB001652")
-
-    time.sleep(10)
-except Exception as ex:
-    print(ex)
-finally:
-    driver.close()
-    driver.quit()
+# try:
+#     # driver.get("https://intoli.com/blog/not-possible-to-block-chrome-headless/chrome-headless-test.html")
+#     driver.get("https://www.vindecoderz.com/EN/check-lookup/ZDMMADBMXHB001652")
+#
+#     time.sleep(10)
+# except Exception as ex:
+#     print(ex)
+# finally:
+#     driver.close()
+#     driver.quit()
 
 
 # import undetected_chromedriver
